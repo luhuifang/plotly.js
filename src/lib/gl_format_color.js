@@ -66,10 +66,17 @@ function formatColor(containerIn, opacityIn, len) {
     } else getOpacity = validateOpacity;
 
     if(isArrayColorIn || isArrayOpacityIn) {
+        var cache = {};
         for(var i = 0; i < len; i++) {
+            if (cache[colorIn[i]])
+            {
+                colorOut[i] = cache[colorIn[i]];
+                continue;
+            }
             colori = getColor(colorIn, i);
             opacityi = getOpacity(opacityIn, i);
             colorOut[i] = calculateColor(colori, opacityi);
+            cache[colorIn[i]] = colorOut[i];
         }
     } else colorOut = calculateColor(rgba(colorIn), opacityIn);
 
