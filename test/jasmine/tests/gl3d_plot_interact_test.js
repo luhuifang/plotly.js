@@ -19,7 +19,7 @@ describe('Test gl3d before/after plot', function() {
     var mock = require('@mocks/gl3d_marker-arrays.json');
 
     beforeEach(function() {
-        jasmine.DEFAULT_TIMEOUT_INTERVAL = 4000;
+        jasmine.DEFAULT_TIMEOUT_INTERVAL = 8000;
     });
 
     afterEach(function() {
@@ -144,7 +144,7 @@ describe('Test gl3d plots', function() {
 
     beforeEach(function() {
         gd = createGraphDiv();
-        jasmine.DEFAULT_TIMEOUT_INTERVAL = 6000;
+        jasmine.DEFAULT_TIMEOUT_INTERVAL = 12000;
     });
 
     afterEach(function() {
@@ -918,7 +918,7 @@ describe('Test gl3d drag and wheel interactions', function() {
 
     beforeEach(function() {
         gd = createGraphDiv();
-        jasmine.DEFAULT_TIMEOUT_INTERVAL = 3000;
+        jasmine.DEFAULT_TIMEOUT_INTERVAL = 6000;
     });
 
     afterEach(function() {
@@ -941,15 +941,15 @@ describe('Test gl3d drag and wheel interactions', function() {
         var sceneTarget;
         var relayoutCallback = jasmine.createSpy('relayoutCallback');
 
-        function assertEvent(e) {
-            expect(e.defaultPrevented).toEqual(true);
+        function assertEvent(e, passive) {
+            expect(e.defaultPrevented).not.toEqual(passive);
             relayoutCallback();
         }
 
-        gd.addEventListener('touchend', assertEvent);
-        gd.addEventListener('touchstart', assertEvent);
-        gd.addEventListener('touchmove', assertEvent);
-        gd.addEventListener('wheel', assertEvent);
+        gd.addEventListener('touchend', function(e) { assertEvent(e, true); });
+        gd.addEventListener('touchstart', function(e) { assertEvent(e, true); });
+        gd.addEventListener('touchmove', function(e) { assertEvent(e, false); });
+        gd.addEventListener('wheel', function(e) { assertEvent(e, false); });
 
         Plotly.plot(gd, mock)
         .then(function() {

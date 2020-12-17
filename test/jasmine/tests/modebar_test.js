@@ -981,6 +981,29 @@ describe('ModeBar', function() {
 
             expect(function() { manageModeBar(gd); }).toThrowError();
         });
+
+        it('add pre-defined buttons as strings for drawing shapes on cartesian subplot', function() {
+            var gd = setupGraphInfo();
+            manageModeBar(gd);
+
+            var initialGroupCount = countGroups(gd._fullLayout._modeBar);
+            var initialButtonCount = countButtons(gd._fullLayout._modeBar);
+
+            gd._context.modeBarButtonsToAdd = [
+                'drawline',
+                'drawopenpath',
+                'drawclosedpath',
+                'drawcircle',
+                'drawrect',
+                'eraseshape'
+            ];
+            manageModeBar(gd);
+
+            expect(countGroups(gd._fullLayout._modeBar))
+                .toEqual(initialGroupCount + 0); // no new group - added inside the dragMode group
+            expect(countButtons(gd._fullLayout._modeBar))
+                .toEqual(initialButtonCount + 6);
+        });
     });
 
     describe('modebar on clicks', function() {
@@ -1554,6 +1577,48 @@ describe('ModeBar', function() {
                 expect(size.width > size.height).toBeTruthy();
             })
             .then(done);
+        });
+    });
+
+    describe('modebar html', function() {
+        var gd;
+        var traces = [
+            {type: 'scatter', x: [1, 2], y: [1, 2]},
+            {type: 'scatter3d', x: [1, 2], y: [1, 2], z: [1, 2]},
+            {type: 'surface', z: [[1, 2], [1, 2]]},
+            {type: 'heatmap', z: [[1, 2], [1, 2]]},
+        ];
+
+        beforeEach(function() {
+            gd = createGraphDiv();
+        });
+
+        afterEach(function() {
+            Plotly.purge(gd);
+            destroyGraphDiv();
+        });
+
+        function getModebarDiv() {
+            return document.getElementById('modebar-' + gd._fullLayout._uid);
+        }
+
+        traces.forEach(function(fromTrace) {
+            traces.forEach(function(toTrace) {
+                it('is still present when switching from ' + fromTrace.type + ' to ' + toTrace.type, function(done) {
+                    Plotly.plot(gd, [fromTrace], {})
+                    .then(function() {
+                        expect(getModebarDiv()).toBeTruthy();
+                        expect(getModebarDiv().innerHTML).toBeTruthy();
+                    })
+                    .then(Plotly.react(gd, [toTrace]))
+                    .then(function() {
+                        expect(getModebarDiv()).toBeTruthy();
+                        expect(getModebarDiv().innerHTML).toBeTruthy();
+                    })
+                    .then(done)
+                    .catch(failTest);
+                });
+            });
         });
     });
 });

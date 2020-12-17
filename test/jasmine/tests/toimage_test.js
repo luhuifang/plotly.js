@@ -6,6 +6,7 @@ var createGraphDiv = require('../assets/create_graph_div');
 var destroyGraphDiv = require('../assets/destroy_graph_div');
 var failTest = require('../assets/fail_test');
 var subplotMock = require('@mocks/multiple_subplots.json');
+var pieAutoMargin = require('@mocks/pie_automargin');
 
 var FORMATS = ['png', 'jpeg', 'webp', 'svg'];
 
@@ -65,7 +66,7 @@ describe('Plotly.toImage', function() {
         Plotly.plot(gd, fig.data, fig.layout)
         .then(function(gd) {
             expect(function() { Plotly.toImage(gd, {format: 'x'}); })
-                .toThrow(new Error('Image format is not jpeg, png, svg or webp.'));
+                .toThrow(new Error('Export format is not png, jpeg, webp, svg or full-json.'));
         })
         .catch(failTest)
         .then(done);
@@ -235,7 +236,7 @@ describe('Plotly.toImage', function() {
 
         var base = d3.select('body')
             .append('base')
-            .attr('href', 'https://plot.ly');
+            .attr('href', 'https://chart-studio.plotly.com');
 
         Plotly.plot(gd, [{ y: [1, 2, 1] }])
         .then(function() {
@@ -261,6 +262,93 @@ describe('Plotly.toImage', function() {
         .then(function() {
             base.remove();
             done();
+        });
+    });
+
+    describe('with format `full-json`', function() {
+        var imgOpts = {format: 'full-json', imageDataOnly: true};
+        var gd;
+
+        beforeEach(function() {
+            gd = createGraphDiv();
+        });
+        afterEach(destroyGraphDiv);
+
+        it('export a graph div', function(done) {
+            Plotly.plot(gd, [{y: [1, 2, 3]}])
+            .then(function(gd) { return Plotly.toImage(gd, imgOpts);})
+            .then(function(fig) {
+                fig = JSON.parse(fig);
+                ['data', 'layout', 'config'].forEach(function(key) {
+                    expect(fig.hasOwnProperty(key)).toBeTruthy('is missing key: ' + key);
+                });
+                expect(fig.data[0].mode).toBe('lines+markers', 'contain default mode');
+                expect(fig.version).toBe(Plotly.version, 'contains Plotly version');
+            })
+            .catch(failTest)
+            .then(done);
+        });
+
+        it('export an object with data/layout/config', function(done) {
+            Plotly.toImage({data: [{y: [1, 2, 3]}]}, imgOpts)
+            .then(function(fig) {
+                fig = JSON.parse(fig);
+                ['data', 'layout', 'config'].forEach(function(key) {
+                    expect(fig.hasOwnProperty(key)).toBeTruthy('is missing key: ' + key);
+                });
+                expect(fig.data[0].mode).toBe('lines+markers', 'contain default mode');
+                expect(fig.version).toBe(Plotly.version, 'contains Plotly version');
+            })
+            .catch(failTest)
+            .then(done);
+        });
+
+        it('export computed margins', function(done) {
+            Plotly.toImage(pieAutoMargin, imgOpts)
+            .then(function(fig) {
+                fig = JSON.parse(fig);
+                var computed = fig.layout.computed;
+                expect(computed).toBeDefined('no computed');
+                expect(computed.margin).toBeDefined('no computed margin');
+                expect(computed.margin.t).toBeDefined('no top');
+                expect(computed.margin.l).toBeDefined('no left');
+                expect(computed.margin.r).toBeDefined('no right');
+                expect(computed.margin.b).toBeDefined('no bottom');
+            })
+            .catch(failTest)
+            .then(done);
+        });
+
+        it('record and export computed margins with "Too many auto-margin redraws"', function(done) {
+            Plotly.toImage({
+                data: [{
+                    x: [
+                        'a',
+                        'b',
+                        'looooooooooooooooooooooooooooooooooog',
+                        'd'
+                    ]
+                }],
+                layout: {
+                    width: 400,
+                    height: 400,
+                    paper_bgcolor: 'lightblue',
+                    xaxis: {
+                        automargin: true
+                    },
+                    yaxis: {
+                        automargin: true
+                    }
+                }
+            }, imgOpts)
+            .then(function(fig) {
+                fig = JSON.parse(fig);
+                var computed = fig.layout.computed;
+                expect(computed.margin.b).toBeGreaterThan(80);
+                expect(computed.margin.r).toBeGreaterThan(80);
+            })
+            .catch(failTest)
+            .then(done);
         });
     });
 });

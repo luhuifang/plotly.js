@@ -465,6 +465,30 @@ describe('scattermapbox convert', function() {
         expect(symbolProps).toEqual(expected, 'geojson properties');
     });
 
+
+    it('should allow symbols to be rotated and overlapped', function() {
+        var opts = _convert(Lib.extendFlat({}, base, {
+            mode: 'markers',
+            marker: {
+                symbol: ['monument', 'music', 'harbor'],
+                angle: [0, 90, 45],
+                allowoverlap: true
+            },
+        }));
+
+        var symbolAngle = opts.symbol.geojson.features.map(function(f) {
+            return f.properties.angle;
+        });
+
+        var expected = [0, 90, 45, 0, 0];
+        expect(symbolAngle).toEqual(expected, 'geojson properties');
+
+
+        expect(opts.symbol.layout['icon-rotate'].property).toEqual('angle', 'symbol.layout.icon-rotate');
+        expect(opts.symbol.layout['icon-allow-overlap']).toEqual(true, 'symbol.layout.icon-allow-overlap');
+    });
+
+
     it('should generate correct output for text + lines traces', function() {
         var opts = _convert(Lib.extendFlat({}, base, {
             mode: 'lines+text',
@@ -927,7 +951,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
             click(pointPos[0], pointPos[1]);
 
             var pt = futureData.points[0];
-            var evt = futureData.event;
 
             expect(Object.keys(pt)).toEqual([
                 'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
@@ -939,9 +962,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
             expect(pt.lat).toEqual(10, 'points[0].lat');
             expect(pt.lon).toEqual(10, 'points[0].lon');
             expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
-
-            expect(evt.clientX).toEqual(pointPos[0], 'event.clientX');
-            expect(evt.clientY).toEqual(pointPos[1], 'event.clientY');
         });
     });
 
@@ -989,8 +1009,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
             // expect(pt.lon).toEqual(10, 'points[0].lon');
             // expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
 
-            // expect(evt.clientX).toEqual(pointPos[0], 'event.clientX');
-            // expect(evt.clientY).toEqual(pointPos[1], 'event.clientY');
             // Object.getOwnPropertyNames(clickOpts).forEach(function(opt) {
             //     expect(evt[opt]).toEqual(clickOpts[opt], 'event.' + opt);
             // });
@@ -1011,7 +1029,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
             mouseEvent('mousemove', pointPos[0], pointPos[1]);
 
             var pt = futureData.points[0];
-            var evt = futureData.event;
 
             expect(Object.keys(pt)).toEqual([
                 'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
@@ -1023,9 +1040,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
             expect(pt.lat).toEqual(10, 'points[0].lat');
             expect(pt.lon).toEqual(10, 'points[0].lon');
             expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
-
-            expect(evt.clientX).toEqual(pointPos[0], 'event.clientX');
-            expect(evt.clientY).toEqual(pointPos[1], 'event.clientY');
         });
     });
 
@@ -1041,7 +1055,6 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
         it('@gl should contain the correct fields', function(done) {
             move(pointPos[0], pointPos[1], nearPos[0], nearPos[1], HOVERMINTIME + 10).then(function() {
                 var pt = futureData.points[0];
-                var evt = futureData.event;
 
                 expect(Object.keys(pt)).toEqual([
                     'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
@@ -1053,9 +1066,130 @@ describe('@noCI Test plotly events on a scattermapbox plot:', function() {
                 expect(pt.lat).toEqual(10, 'points[0].lat');
                 expect(pt.lon).toEqual(10, 'points[0].lon');
                 expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
+            }).then(done);
+        });
+    });
+});
 
-                expect(evt.clientX).toEqual(nearPos[0], 'event.clientX');
-                expect(evt.clientY).toEqual(nearPos[1], 'event.clientY');
+describe('@noCI Test plotly events on a scattermapbox plot when css transform is present:', function() {
+    var mock = require('@mocks/mapbox_0.json');
+    var pointPos = [440 / 2, 290 / 2];
+    var nearPos = [460 / 2, 290 / 2];
+    var blankPos = [10 / 2, 10 / 2];
+    var mockCopy;
+    var gd;
+
+    function transformPlot(gd, transformString) {
+        gd.style.webkitTransform = transformString;
+        gd.style.MozTransform = transformString;
+        gd.style.msTransform = transformString;
+        gd.style.OTransform = transformString;
+        gd.style.transform = transformString;
+    }
+
+    beforeAll(function() {
+        Plotly.setPlotConfig({
+            mapboxAccessToken: require('@build/credentials.json').MAPBOX_ACCESS_TOKEN
+        });
+    });
+
+    beforeEach(function(done) {
+        gd = createGraphDiv();
+        mockCopy = Lib.extendDeep({}, mock);
+        mockCopy.layout.width = 800;
+        mockCopy.layout.height = 500;
+
+        Plotly.plot(gd, mockCopy)
+            .then(function() { transformPlot(gd, 'translate(-25%, -25%) scale(0.5)'); })
+            .then(done);
+    });
+
+    afterEach(destroyGraphDiv);
+
+    describe('click events', function() {
+        var futureData;
+
+        beforeEach(function() {
+            futureData = undefined;
+            gd.on('plotly_click', function(data) {
+                futureData = data;
+            });
+        });
+
+        it('@gl should not be trigged when not on data points', function() {
+            click(blankPos[0], blankPos[1]);
+            expect(futureData).toBe(undefined);
+        });
+
+        it('@gl should contain the correct fields', function() {
+            click(pointPos[0], pointPos[1]);
+
+            var pt = futureData.points[0];
+
+            expect(Object.keys(pt)).toEqual([
+                'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
+            ]);
+
+            expect(pt.curveNumber).toEqual(0, 'points[0].curveNumber');
+            expect(typeof pt.data).toEqual(typeof {}, 'points[0].data');
+            expect(typeof pt.fullData).toEqual(typeof {}, 'points[0].fullData');
+            expect(pt.lat).toEqual(10, 'points[0].lat');
+            expect(pt.lon).toEqual(10, 'points[0].lon');
+            expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
+        });
+    });
+
+    describe('hover events', function() {
+        var futureData;
+
+        beforeEach(function() {
+            gd.on('plotly_hover', function(data) {
+                futureData = data;
+            });
+        });
+
+        it('@gl should contain the correct fields', function() {
+            mouseEvent('mousemove', blankPos[0], blankPos[1]);
+            mouseEvent('mousemove', pointPos[0], pointPos[1]);
+
+            var pt = futureData.points[0];
+
+            expect(Object.keys(pt)).toEqual([
+                'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
+            ]);
+
+            expect(pt.curveNumber).toEqual(0, 'points[0].curveNumber');
+            expect(typeof pt.data).toEqual(typeof {}, 'points[0].data');
+            expect(typeof pt.fullData).toEqual(typeof {}, 'points[0].fullData');
+            expect(pt.lat).toEqual(10, 'points[0].lat');
+            expect(pt.lon).toEqual(10, 'points[0].lon');
+            expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
+        });
+    });
+
+    describe('unhover events', function() {
+        var futureData;
+
+        beforeEach(function() {
+            gd.on('plotly_unhover', function(data) {
+                futureData = data;
+            });
+        });
+
+        it('@gl should contain the correct fields', function(done) {
+            move(pointPos[0], pointPos[1], nearPos[0], nearPos[1], HOVERMINTIME + 10).then(function() {
+                var pt = futureData.points[0];
+
+                expect(Object.keys(pt)).toEqual([
+                    'data', 'fullData', 'curveNumber', 'pointNumber', 'pointIndex', 'lon', 'lat'
+                ]);
+
+                expect(pt.curveNumber).toEqual(0, 'points[0].curveNumber');
+                expect(typeof pt.data).toEqual(typeof {}, 'points[0].data');
+                expect(typeof pt.fullData).toEqual(typeof {}, 'points[0].fullData');
+                expect(pt.lat).toEqual(10, 'points[0].lat');
+                expect(pt.lon).toEqual(10, 'points[0].lon');
+                expect(pt.pointNumber).toEqual(0, 'points[0].pointNumber');
             }).then(done);
         });
     });

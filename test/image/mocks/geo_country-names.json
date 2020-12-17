@@ -391,6 +391,12 @@
             ],
             "zmin": 0.1,
             "zmax": 17.5,
+            "colorbar": {
+                "dtick": 1,
+                "ticks": "inside",
+                "ticklen": 16,
+                "ticklabelposition": "inside bottom"
+            },
             "colorscale": [
                 [
                     0,
@@ -1019,12 +1025,14 @@
     ],
     "layout": {
         "autosize": false,
-        "title": "Pure alcohol consumption among adults (age 15+) in 2010",
+        "title": {
+            "text": "Pure alcohol consumption among adults (age 15+) in 2010",
+            "font": {
+                "size": 24
+            }
+        },
         "height": 700,
         "width": 800,
-        "titlefont": {
-            "size": 24
-        },
         "geo": {
             "projection": {
                 "type": "robinson"

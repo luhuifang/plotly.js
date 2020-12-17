@@ -136,6 +136,8 @@ proto.prepareOptions = function() {
     return opts;
 };
 
+var firstInit = true;
+
 proto.tryCreatePlot = function() {
     var scene = this;
 
@@ -146,7 +148,7 @@ proto.tryCreatePlot = function() {
     try {
         scene.glplot = createPlot(opts);
     } catch(e) {
-        if(scene.staticMode) {
+        if(scene.staticMode || !firstInit) {
             success = false;
         } else { // try second time
             try {
@@ -158,14 +160,21 @@ proto.tryCreatePlot = function() {
                     'The device may not be supported by is-mobile module!',
                     'Inverting preserveDrawingBuffer option in second attempt to create webgl scene.'
                 ].join(' '));
+
+                // invert is-mobile
                 isMobile = opts.glOptions.preserveDrawingBuffer = !opts.glOptions.preserveDrawingBuffer;
 
                 scene.glplot = createPlot(opts);
             } catch(e) {
+                // revert changes to is-mobile
+                isMobile = opts.glOptions.preserveDrawingBuffer = !opts.glOptions.preserveDrawingBuffer;
+
                 success = false;
             }
         }
     }
+
+    firstInit = false;
 
     return success;
 };
@@ -238,43 +247,45 @@ proto.initializeGLPlot = function() {
         scene.graphDiv.emit('plotly_relayout', update);
     };
 
-    scene.glplot.canvas.addEventListener('mouseup', function() {
-        relayoutCallback(scene);
-    });
-
-    scene.glplot.canvas.addEventListener('wheel', function(e) {
-        if(gd._context._scrollZoom.gl3d) {
-            if(scene.camera._ortho) {
-                var s = (e.deltaX > e.deltaY) ? 1.1 : 1.0 / 1.1;
-                var o = scene.glplot.getAspectratio();
-                scene.glplot.setAspectratio({
-                    x: s * o.x,
-                    y: s * o.y,
-                    z: s * o.z
-                });
-            }
-
+    if(scene.glplot.canvas) {
+        scene.glplot.canvas.addEventListener('mouseup', function() {
             relayoutCallback(scene);
-        }
-    }, passiveSupported ? {passive: false} : false);
+        });
 
-    scene.glplot.canvas.addEventListener('mousemove', function() {
-        if(scene.fullSceneLayout.dragmode === false) return;
-        if(scene.camera.mouseListener.buttons === 0) return;
+        scene.glplot.canvas.addEventListener('wheel', function(e) {
+            if(gd._context._scrollZoom.gl3d) {
+                if(scene.camera._ortho) {
+                    var s = (e.deltaX > e.deltaY) ? 1.1 : 1.0 / 1.1;
+                    var o = scene.glplot.getAspectratio();
+                    scene.glplot.setAspectratio({
+                        x: s * o.x,
+                        y: s * o.y,
+                        z: s * o.z
+                    });
+                }
 
-        var update = makeUpdate();
-        scene.graphDiv.emit('plotly_relayouting', update);
-    });
-
-    if(!scene.staticMode) {
-        scene.glplot.canvas.addEventListener('webglcontextlost', function(event) {
-            if(gd && gd.emit) {
-                gd.emit('plotly_webglcontextlost', {
-                    event: event,
-                    layer: scene.id
-                });
+                relayoutCallback(scene);
             }
-        }, false);
+        }, passiveSupported ? {passive: false} : false);
+
+        scene.glplot.canvas.addEventListener('mousemove', function() {
+            if(scene.fullSceneLayout.dragmode === false) return;
+            if(scene.camera.mouseListener.buttons === 0) return;
+
+            var update = makeUpdate();
+            scene.graphDiv.emit('plotly_relayouting', update);
+        });
+
+        if(!scene.staticMode) {
+            scene.glplot.canvas.addEventListener('webglcontextlost', function(event) {
+                if(gd && gd.emit) {
+                    gd.emit('plotly_webglcontextlost', {
+                        event: event,
+                        layer: scene.id
+                    });
+                }
+            }, false);
+        }
     }
 
     scene.glplot.oncontextloss = function() {
@@ -296,8 +307,12 @@ proto.render = function() {
     // update size of svg container
     var svgContainer = scene.svgContainer;
     var clientRect = scene.container.getBoundingClientRect();
-    var width = clientRect.width;
-    var height = clientRect.height;
+
+    gd._fullLayout._calcInverseTransform(gd);
+    var scaleX = gd._fullLayout._invScaleX;
+    var scaleY = gd._fullLayout._invScaleY;
+    var width = clientRect.width * scaleX;
+    var height = clientRect.height * scaleY;
     svgContainer.setAttributeNS(null, 'viewBox', '0 0 ' + width + ' ' + height);
     svgContainer.setAttributeNS(null, 'width', width);
     svgContainer.setAttributeNS(null, 'height', height);
@@ -1018,6 +1033,37 @@ proto.updateFx = function(dragmode, hovermode) {
     scene.fullSceneLayout.hovermode = hovermode;
 };
 
+function flipPixels(pixels, w, h) {
+    for(var i = 0, q = h - 1; i < q; ++i, --q) {
+        for(var j = 0; j < w; ++j) {
+            for(var k = 0; k < 4; ++k) {
+                var a = 4 * (w * i + j) + k;
+                var b = 4 * (w * q + j) + k;
+                var tmp = pixels[a];
+                pixels[a] = pixels[b];
+                pixels[b] = tmp;
+            }
+        }
+    }
+}
+
+function correctRGB(pixels, w, h) {
+    for(var i = 0; i < h; ++i) {
+        for(var j = 0; j < w; ++j) {
+            var k = 4 * (w * i + j);
+
+            var a = pixels[k + 3]; // alpha
+            if(a > 0) {
+                var q = 255 / a;
+
+                for(var l = 0; l < 3; ++l) { // RGB
+                    pixels[k + l] = Math.min(q * pixels[k + l], 255);
+                }
+            }
+        }
+    }
+}
+
 proto.toImage = function(format) {
     var scene = this;
 
@@ -1036,17 +1082,8 @@ proto.toImage = function(format) {
 
     var pixels = new Uint8Array(w * h * 4);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-    // Flip pixels
-    for(var j = 0, k = h - 1; j < k; ++j, --k) {
-        for(var i = 0; i < w; ++i) {
-            for(var l = 0; l < 4; ++l) {
-                var tmp = pixels[4 * (w * j + i) + l];
-                pixels[4 * (w * j + i) + l] = pixels[4 * (w * k + i) + l];
-                pixels[4 * (w * k + i) + l] = tmp;
-            }
-        }
-    }
+    flipPixels(pixels, w, h);
+    correctRGB(pixels, w, h);
 
     var canvas = document.createElement('canvas');
     canvas.width = w;

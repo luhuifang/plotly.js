@@ -15,7 +15,7 @@ var failTest = require('../assets/fail_test');
 var negateIf = require('../assets/negate_if');
 var checkTicks = require('../assets/custom_assertions').checkTicks;
 var supplyAllDefaults = require('../assets/supply_defaults');
-var color = require('../../../src/components/color');
+var color = require('@src/components/color');
 var rgb = color.rgb;
 
 var checkEventData = require('../assets/check_event_data');
@@ -422,6 +422,31 @@ describe('Bar.calc', function() {
 
         var cd = gd.calcdata;
         assertPointField(cd, 'mlw', [[2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 10]]);
+    });
+
+    it('should translate sizes e.g. 2000 to milliseconds not to year when base is present (vertical case)', function() {
+        var gd = mockBarPlot([{
+            type: 'bar',
+            base: [0],
+            y: [2000],
+            x: ['A']
+        }], {yaxis: {type: 'date'}});
+
+        var cd = gd.calcdata;
+        assertPointField(cd, 's', [[2000]]);
+    });
+
+    it('should translate sizes e.g. 2000 to milliseconds not to year when base is present (horizontal case)', function() {
+        var gd = mockBarPlot([{
+            type: 'bar',
+            orientation: 'h',
+            base: [0],
+            x: [2000],
+            y: ['A']
+        }], {xaxis: {type: 'date'}});
+
+        var cd = gd.calcdata;
+        assertPointField(cd, 's', [[2000]]);
     });
 });
 
@@ -942,6 +967,23 @@ describe('Bar.crossTraceCalc (formerly known as setPositions)', function() {
 
         expect(gd._fullLayout.xaxis.type).toBe('multicategory');
         assertPointField(gd.calcdata, 'b', [[0, 0, 0, 0]]);
+    });
+
+    it('should set unit width for categories in overlay mode', function() {
+        var gd = mockBarPlot([{
+            type: 'bar',
+            x: ['a', 'b', 'c'],
+            y: [2, 2, 2]
+        },
+        {
+            type: 'bar',
+            x: ['a', 'c'],
+            y: [1, 1]
+        }], {
+            barmode: 'overlay'
+        });
+
+        expect(gd.calcdata[1][0].t.bardelta).toBe(1);
     });
 
     describe('should relative-stack bar within the same trace that overlap under barmode=group', function() {
@@ -2077,6 +2119,21 @@ describe('A bar plot', function() {
         .then(done);
     });
 
+    it('should display bar of zero-length as M0,0Z when staticPlot is true', function(done) {
+        // otherwise Chromium produces a PDF with visual artifacts in place of zero-length bar: https://github.com/plotly/orca/issues/345
+        var mock = {data: [{type: 'bar', x: ['a', 'b'], y: [0, 5]}], config: {staticPlot: true}};
+
+        Plotly.newPlot(gd, mock)
+        .then(function() {
+            var nodes = gd.querySelectorAll('g.point > path');
+            expect(nodes.length).toBe(2, '# of bars');
+            var d = nodes[0].getAttribute('d');
+            expect(d).toBe('M0,0Z');
+        })
+        .catch(failTest)
+        .then(done);
+    });
+
     describe('show narrow bars', function() {
         ['initial zoom', 'after zoom out'].forEach(function(zoomStr) {
             it(zoomStr, function(done) {
@@ -2453,6 +2510,52 @@ describe('bar hover', function() {
             .catch(failTest)
             .then(done);
         });
+
+        it('should provide a default label for base in hovertemplate', function(done) {
+            gd = createGraphDiv();
+
+            function _hover(xpx, ypx) {
+                return function() {
+                    Fx.hover(gd, {xpx: xpx, ypx: ypx}, 'xy');
+                    Lib.clearThrottle();
+                };
+            }
+
+            Plotly.plot(gd, {
+                data: [{
+                    type: 'bar',
+                    orientation: 'h',
+                    base: ['2020-04-06 22:17:00'],
+                    x: [11520000.0],
+                    y: ['test'],
+                    hovertemplate: ['%{base}<br>%{x}']
+                }],
+                layout: {
+                    xaxis: { type: 'date', tickprefix: '*', ticksuffix: '*' },
+                    width: 400,
+                    height: 400,
+                    margin: {l: 0, t: 0, r: 0, b: 0},
+                    hovermode: 'closest'
+                }
+            })
+            .then(_hover(200, 200))
+            .then(function() {
+                assertHoverLabelContent({
+                    nums: '*Apr 6, 2020, 22:17*\n*Apr 7, 2020, 01:29*',
+                    name: 'trace 0'
+                });
+                return Plotly.relayout(gd, 'xaxis.tickformat', '%d');
+            })
+            .then(_hover(200, 200))
+            .then(function() {
+                assertHoverLabelContent({
+                    nums: '*06*\n*07*',
+                    name: 'trace 0'
+                });
+            })
+            .catch(failTest)
+            .then(done);
+        });
     });
 
     describe('with special width/offset combinations', function() {
@@ -2598,6 +2701,26 @@ describe('bar hover', function() {
                 .catch(failTest)
                 .then(done);
             });
+        });
+    });
+
+    describe('gantt chart using milliseconds from base', function() {
+        beforeAll(function(done) {
+            gd = createGraphDiv();
+
+            var mock = Lib.extendDeep({}, require('@mocks/bar-with-milliseconds.json'));
+
+            Plotly.newPlot(gd, mock.data, mock.layout)
+            .catch(failTest)
+            .then(done);
+        });
+
+        it('should display the correct bar length passed in milliseconds from base', function() {
+            var out = _hover(gd, 0.5, 0.75, 'y');
+
+            var xEnd = out.style[2];
+            expect(xEnd).not.toBe(1580670000000);
+            expect(xEnd).toBe(1580688000000);
         });
     });
 });
@@ -2876,7 +2999,7 @@ describe('bar tweening', function() {
             data: [{
                 type: 'bar',
                 x: ['A', 'B', 'C'],
-                y: [null, 5, 3],
+                y: [null, 5, 3, 4],
                 marker: {
                     line: {
                         width: 10
@@ -2926,6 +3049,87 @@ describe('bar tweening', function() {
             [600, '.point path', 'attr', 'd', ['M0,116V84H228V116Z', 'M0,76V44H0V76Z', 'M0,36V4H91V36Z']]
         ];
         var animateOpts = {data: [{x: [5, null, 2]}]};
+
+        checkTransition(gd, mockCopy, animateOpts, transitionOpts, tests)
+          .catch(failTest)
+          .then(done);
+    });
+
+    it('handle BADNUM positions on vertical bars', function(done) {
+        var y1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        var y2 = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        var mockCopy = {
+            data: [
+                {
+                    type: 'bar',
+                    x: [
+                        0,
+                        1,
+                        '',
+                        'NaN',
+                        NaN,
+                        Infinity,
+                        -Infinity,
+                        undefined,
+                        null,
+                        9
+                    ],
+                    y: y1
+                }
+            ],
+            layout: {
+                width: 400,
+                height: 300
+            }
+        };
+
+        var tests = [
+            [0, '.point path', 'attr', 'd', ['M2,120V109H22V120Z', 'M26,120V97H46V120Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M218,120V6H238V120Z']],
+            [300, '.point path', 'attr', 'd', ['M2,120V47H22V120Z', 'M26,120V49H46V120Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M218,120V68H238V120Z']],
+            [600, '.point path', 'attr', 'd', ['M2,120V6H22V120Z', 'M26,120V17H46V120Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M218,120V109H238V120Z']]
+        ];
+        var animateOpts = {data: [{y: y2}]};
+
+        checkTransition(gd, mockCopy, animateOpts, transitionOpts, tests)
+          .catch(failTest)
+          .then(done);
+    });
+
+    it('handle NaN positions on horizontal bars', function(done) {
+        var x1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        var x2 = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        var mockCopy = {
+            data: [
+                {
+                    type: 'bar',
+                    orientation: 'h',
+                    y: [
+                        0,
+                        1,
+                        '',
+                        'NaN',
+                        NaN,
+                        Infinity,
+                        -Infinity,
+                        undefined,
+                        null,
+                        9
+                    ],
+                    x: x1
+                }
+            ],
+            layout: {
+                width: 400,
+                height: 300
+            }
+        };
+
+        var tests = [
+            [0, '.point path', 'attr', 'd', ['M0,119V109H23V119Z', 'M0,107V97H46V107Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,11V1H228V11Z']],
+            [300, '.point path', 'attr', 'd', ['M0,119V109H146V119Z', 'M0,107V97H141V107Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,11V1H105V11Z']],
+            [600, '.point path', 'attr', 'd', ['M0,119V109H228V119Z', 'M0,107V97H205V107Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,0Z', 'M0,11V1H23V11Z']]
+        ];
+        var animateOpts = {data: [{x: x2}]};
 
         checkTransition(gd, mockCopy, animateOpts, transitionOpts, tests)
           .catch(failTest)

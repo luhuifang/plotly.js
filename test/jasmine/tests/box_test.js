@@ -26,7 +26,7 @@ describe('Test boxes supplyDefaults', function() {
 
     it('should set visible to false when x and y are empty', function() {
         traceIn = {};
-        supplyDefaults(traceIn, traceOut, defaultColor);
+        supplyDefaults(traceIn, traceOut, defaultColor, {});
         expect(traceOut.visible).toBe(false);
 
         traceIn = {
@@ -633,6 +633,82 @@ describe('Test boxes supplyDefaults', function() {
                 boxpoints: 'outliers'
             });
         });
+    });
+});
+
+describe('Test box autoType', function() {
+    it('should disable converting numeric strings using axis.autotypenumbers', function() {
+        var gd = {
+            layout: {
+                xaxis: { autotypenumbers: 'strict' }
+            },
+            data: [{
+                type: 'box',
+                x: ['3', '0', '1', '2'],
+
+                xaxis: 'x',
+                lowerfence: ['0', '0', '0', '0'],
+                q1: ['0.5', '1', '1.5', '2'],
+                median: ['1', '2', '3', '4'],
+                q3: ['1.5', '3', '4.5', '6'],
+                upperfence: ['2', '4', '6', '8'],
+            }]
+        };
+
+        supplyAllDefaults(gd);
+
+        expect(gd._fullLayout.xaxis.autotypenumbers).toBe('strict');
+        expect(gd._fullLayout.xaxis.type).toBe('category');
+    });
+
+    it('should enable converting numeric strings using axis.autotypenumbers', function() {
+        var gd = {
+            layout: {
+                autotypenumbers: 'strict',
+                xaxis: { autotypenumbers: 'convert types' }
+            },
+            data: [{
+                type: 'box',
+                x: ['3', '0', '1', '2'],
+
+                xaxis: 'x',
+                lowerfence: ['0', '0', '0', '0'],
+                q1: ['0.5', '1', '1.5', '2'],
+                median: ['1', '2', '3', '4'],
+                q3: ['1.5', '3', '4.5', '6'],
+                upperfence: ['2', '4', '6', '8'],
+            }]
+        };
+
+        supplyAllDefaults(gd);
+
+        expect(gd._fullLayout.xaxis.autotypenumbers).toBe('convert types');
+        expect(gd._fullLayout.xaxis.type).toBe('linear');
+    });
+
+    it('should enable converting numeric inherit defaults from layout.autotypenumbers', function() {
+        var gd = {
+            layout: {
+                autotypenumbers: 'strict',
+                xaxis: {}
+            },
+            data: [{
+                type: 'box',
+                x: ['3', '0', '1', '2'],
+
+                xaxis: 'x',
+                lowerfence: ['0', '0', '0', '0'],
+                q1: ['0.5', '1', '1.5', '2'],
+                median: ['1', '2', '3', '4'],
+                q3: ['1.5', '3', '4.5', '6'],
+                upperfence: ['2', '4', '6', '8'],
+            }]
+        };
+
+        supplyAllDefaults(gd);
+
+        expect(gd._fullLayout.xaxis.autotypenumbers).toBe('strict');
+        expect(gd._fullLayout.xaxis.type).toBe('category');
     });
 });
 
@@ -1532,5 +1608,53 @@ describe('Test box calc', function() {
                 ]]
             );
         });
+    });
+});
+
+
+describe('Box crossTraceCalc', function() {
+    'use strict';
+
+    function mockBoxPlot(dataWithoutTraceType, layout) {
+        var traceTemplate = { type: 'box' };
+
+        var dataWithTraceType = dataWithoutTraceType.map(function(trace) {
+            return Lib.extendFlat({}, traceTemplate, trace);
+        });
+
+        var gd = {
+            data: dataWithTraceType,
+            layout: layout || {},
+            calcdata: [],
+            _context: {locale: 'en', locales: {}}
+        };
+
+        supplyAllDefaults(gd);
+        Plots.doCalcdata(gd);
+
+        return gd;
+    }
+
+    it('should set unit width for categories in overlay mode', function() {
+        var gd = mockBoxPlot([{
+            y: [1, 2, 3]
+        },
+        {
+            y: [null, null, null]
+        },
+        {
+            y: [null, null, null]
+        },
+        {
+            y: [4, 5, 6]
+        }], {
+            boxgap: 0,
+            xaxis: {
+                range: [-0.5, 3.5],
+                type: 'category'
+            }
+        });
+
+        expect(gd.calcdata[0][0].t.dPos).toBe(0.5);
     });
 });

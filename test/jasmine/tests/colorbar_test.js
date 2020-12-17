@@ -338,8 +338,8 @@ describe('Test colorbar:', function() {
                 var yAxes = d3.select(gd).selectAll('.parcoords .y-axis');
                 expect(yAxes.size()).toBe(2);
                 var transform = yAxes[0][1].getAttribute('transform');
-                if(expandedMargin) expect(transform).not.toBe('translate(400, 0)');
-                else expect(transform).toBe('translate(400, 0)');
+                if(expandedMargin) expect(transform).not.toBe('translate(400,0)');
+                else expect(transform).toBe('translate(400,0)');
 
                 var cbfills = colorbars.selectAll('.cbfill');
                 expect(cbfills.size()).toBe(present ? 1 : 0);
@@ -521,6 +521,43 @@ describe('Test colorbar:', function() {
                 return Plotly.react(gd, gd.data, gd.layout);
             })
             .then(function() { _assert('after layout trace', {outline: [10, 10]}); })
+            .catch(failTest)
+            .then(done);
+        });
+
+        it('creates the same colorbars attributes in newPlot and react', function(done) {
+            function getCBFillAttributes() {
+                var attrs = [];
+                var colorbars = d3.select(gd).selectAll('.colorbar');
+                colorbars.selectAll('.cbfill').each(function() {
+                    var attrsForElem = {};
+                    for(var i = 0; i < this.attributes.length; i++) {
+                        var attr = this.attributes.item(i);
+                        attrsForElem[attr.name] = attr.value;
+                    }
+                    attrs.push(attrsForElem);
+                });
+                return attrs;
+            }
+
+            var z = [[1, 10], [100, 1000]];
+
+            var expectedAttrs;
+            var actualAttrs;
+
+            Plotly.newPlot(gd, [{type: 'contour', z: z}])
+            .then(function() {
+                expectedAttrs = getCBFillAttributes();
+
+                return Plotly.newPlot(gd, [{type: 'heatmap', z: z}])
+                .then(function() {
+                    return Plotly.react(gd, [{type: 'contour', z: z}]);
+                });
+            })
+            .then(function() {
+                actualAttrs = getCBFillAttributes();
+                expect(actualAttrs).toEqual(expectedAttrs);
+            })
             .catch(failTest)
             .then(done);
         });

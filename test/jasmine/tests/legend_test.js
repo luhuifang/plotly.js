@@ -388,6 +388,7 @@ describe('legend getLegendData', function() {
             }}]
         ];
         opts = {
+            _main: true,
             traceorder: 'normal'
         };
 
@@ -814,6 +815,42 @@ describe('legend relayout update', function() {
         .then(_assert('after relayout to *left*', [607.54, 60], [180, 67]))
         .then(function() { return Plotly.relayout(gd, 'legend.title.side', 'top'); })
         .then(_assert('after relayout to *top*', [667.72, 60], [120, 83]))
+        .catch(failTest)
+        .then(done);
+    });
+
+    it('should be able to clear legend title using react', function(done) {
+        var data = [{
+            type: 'scatter',
+            x: [0, 1],
+            y: [1, 0]
+        }];
+
+        Plotly.newPlot(gd, {
+            data: data,
+            layout: {
+                showlegend: true,
+                legend: {
+                    title: {
+                        text: 'legend<br>title'
+                    }
+                }
+            }
+        })
+        .then(function() {
+            expect(d3.selectAll('.legendtitletext')[0].length).toBe(1);
+        })
+        .then(function() {
+            Plotly.react(gd, {
+                data: data,
+                layout: {
+                    showlegend: true
+                }
+            });
+        })
+        .then(function() {
+            expect(d3.selectAll('.legendtitletext')[0].length).toBe(0);
+        })
         .catch(failTest)
         .then(done);
     });
@@ -1249,6 +1286,47 @@ describe('legend interaction', function() {
                 ]);
                 assertLabels(['boo~~~', '1 (trace 1)', 'hoo        ', '           ', '4 (trace 1)']);
             }).catch(failTest).then(done);
+        });
+    });
+
+    describe('staticPlot', function() {
+        var gd;
+
+        beforeEach(function() {
+            gd = createGraphDiv();
+        });
+
+        afterEach(destroyGraphDiv);
+
+        function toggleTrace() {
+            var toggle = d3.select('.legendtoggle').node();
+            expect(toggle).not.toEqual(null);
+
+            toggle.dispatchEvent(new MouseEvent('mousedown'));
+            toggle.dispatchEvent(new MouseEvent('mouseup'));
+
+            // Delay needs to be long enough for Plotly to react
+            return delay(300)();
+        }
+
+        function assertToggled(toggled) {
+            return function() {
+                var container = d3.select('g.traces').node();
+                expect(container).not.toEqual(null);
+                expect(container.style.opacity).toBe(toggled ? '0.5' : '1');
+            };
+        }
+
+        it('should prevent toggling if set', function(done) {
+            var data = [{ x: [0, 1], y: [0, 1], type: 'scatter' }];
+            var layout = { showlegend: true };
+            var config = { staticPlot: true };
+
+            Plotly.newPlot(gd, data, layout, config)
+                .then(toggleTrace)
+                .then(assertToggled(false))
+                .catch(failTest)
+                .then(done);
         });
     });
 

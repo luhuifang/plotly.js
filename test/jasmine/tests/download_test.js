@@ -2,6 +2,7 @@ var Plotly = require('@lib/index');
 var Lib = require('@src/lib');
 
 var helpers = require('@src/snapshot/helpers');
+var getImageSize = require('@src/traces/image/helpers').getImageSize;
 
 var createGraphDiv = require('../assets/create_graph_div');
 var destroyGraphDiv = require('../assets/destroy_graph_div');
@@ -48,6 +49,12 @@ describe('Plotly.downloadImage', function() {
 
     it('should create link, remove link, accept options', function(done) {
         downloadTest(gd, 'png')
+        .catch(failTest)
+        .then(done);
+    }, LONG_TIMEOUT_INTERVAL);
+
+    it('should create link, remove link, accept options', function(done) {
+        downloadTest(gd, 'full-json')
         .catch(failTest)
         .then(done);
     }, LONG_TIMEOUT_INTERVAL);
@@ -158,6 +165,33 @@ describe('Plotly.downloadImage', function() {
         .catch(failTest)
         .then(done);
     });
+
+    it('should default width & height for downloadImage to match with the live graph', function(done) {
+        spyOn(Lib, 'isSafari').and.callFake(function() { return true; });
+        spyOn(helpers, 'octetStream');
+
+        var fig = {
+            data: [{y: [0, 1]}]
+        };
+
+        gd.style.width = '500px';
+        gd.style.height = '300px';
+
+        Plotly.plot(gd, fig)
+        .then(function() { return Plotly.downloadImage(gd, {format: 'png'}); })
+        .then(function() {
+            var args = helpers.octetStream.calls.allArgs();
+            var blob = args[0][0];
+            expect(blob.slice(0, 8)).toBe(';base64,', 'format:png');
+            var size = getImageSize('data:image/png' + blob);
+            expect(size.width).toBe(gd._fullLayout.width, 'fullLayout width');
+            expect(size.height).toBe(gd._fullLayout.height, 'fullLayout height');
+            expect(size.width).toBe(500, 'div width');
+            expect(size.height).toBe(300, 'div height');
+        })
+        .catch(failTest)
+        .then(done);
+    });
 });
 
 function downloadTest(gd, format) {
@@ -203,7 +237,7 @@ function downloadTest(gd, format) {
         var linkdeleted = domchanges[domchanges.length - 1].removedNodes[0];
 
         expect(linkadded.getAttribute('href').split(':')[0]).toBe('blob');
-        expect(filename).toBe('plotly_download.' + format);
+        expect(filename).toBe('plotly_download.' + format.replace('-', '.'));
         expect(linkadded).toBe(linkdeleted);
     });
 }
